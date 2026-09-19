@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="GestaoColaboradores.API/GestaoColaboradores.API.csproj" />
+  <Project Path="GestaoColaboradores.Domain/GestaoColaboradores.Domain.csproj" />
+  <Project Path="GestaoColaboradores.Infrastructure/GestaoColaboradores.Infrastructure.csproj" />
+</Solution>
