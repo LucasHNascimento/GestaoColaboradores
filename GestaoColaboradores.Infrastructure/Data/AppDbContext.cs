@@ -1,28 +1,28 @@
-﻿using GestaoColaboradores.Domain.Entities;
-using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
+using GestaoColaboradores.Domain.Entities;
 
-namespace GestaoColaboradores.Infrastructure.Data;
-
-public class AppDbContext : IdentityDbContext<Usuario>
+namespace GestaoColaboradores.Infrastructure.Data
 {
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
-
-    public DbSet<Ticket> Tickets { get; set; }
-
-    protected override void OnModelCreating(ModelBuilder builder)
+    // Alterado de IdentityDbContext para DbContext padrão
+    public class AppDbContext : DbContext
     {
-        base.OnModelCreating(builder);
-
-        builder.Entity<Ticket>(entity =>
+        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
         {
-            entity.HasKey(t => t.Id);
-            entity.Property(t => t.ValorSolicitado).HasPrecision(18, 2);
+        }
 
-            entity.HasOne(t => t.Usuario)
-                  .WithMany(u => u.Tickets)
-                  .HasForeignKey(t => t.UsuarioId)
-                  .OnDelete(DeleteBehavior.Cascade);
-        });
+        public DbSet<Usuario> Usuarios { get; set; }
+        public DbSet<Ticket> Tickets { get; set; }
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+
+            // Mapeamento da relação entre o Utilizador e os seus Tickets
+            modelBuilder.Entity<Ticket>()
+                .HasOne(t => t.Usuario)
+                .WithMany()
+                .HasForeignKey(t => t.UsuarioId)
+                .IsRequired();
+        }
     }
 }

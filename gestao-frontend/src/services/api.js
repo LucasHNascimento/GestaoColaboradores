@@ -1,7 +1,9 @@
 import axios from 'axios';
 
+console.log("URL da API:", import.meta.env.VITE_API_URL); // Linha temporária
+
 const api = axios.create({
-  baseURL: 'http://localhost:5035/api', 
+  baseURL: import.meta.env.VITE_API_URL,
 });
 
 api.interceptors.request.use((config) => {

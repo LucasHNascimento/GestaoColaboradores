@@ -59,7 +59,7 @@ public class TicketsController : ControllerBase
         if (dto.Tipo == TipoTicket.AdiantamentoSalarial && (dto.Valor == null || dto.Valor <= 0))
             return BadRequest("Para adiantamento salarial, o valor deve ser maior que zero.");
 
-        var ticket = new Ticket(dto.Tipo, userId, dto.Valor);
+        var ticket = new Ticket(userId, dto.Tipo, dto.Valor);
 
         _context.Tickets.Add(ticket);
         await _context.SaveChangesAsync(); // Efetiva a gravação no PostgreSQL
@@ -125,31 +125,5 @@ public class TicketsController : ControllerBase
         // Se o seu contexto de banco de dados tiver um nome diferente de _context, ajuste aqui
         var tickets = await _context.Tickets.ToListAsync();
         return Ok(tickets);
-    }
-
-    // Recebe o comando do botão "Aprovar" no React
-    [HttpPut("{id}/aprovar")]
-    public async Task<IActionResult> Aprovar(Guid id) // Troque Guid por int se o seu ID for numérico
-    {
-        var ticket = await _context.Tickets.FindAsync(id);
-        if (ticket == null) return NotFound("Ticket não encontrado.");
-
-        ticket.Aprovar(); // Executa a regra de domínio criada na entidade
-        await _context.SaveChangesAsync();
-
-        return Ok();
-    }
-
-    // Recebe o comando do botão "Recusar" no React
-    [HttpPut("{id}/recusar")]
-    public async Task<IActionResult> Recusar(Guid id) // Troque Guid por int se o seu ID for numérico
-    {
-        var ticket = await _context.Tickets.FindAsync(id);
-        if (ticket == null) return NotFound("Ticket não encontrado.");
-
-        ticket.Recusar(); // Executa a regra de domínio criada na entidade
-        await _context.SaveChangesAsync();
-
-        return Ok();
     }
 }

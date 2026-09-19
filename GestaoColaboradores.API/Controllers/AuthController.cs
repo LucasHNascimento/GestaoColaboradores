@@ -1,86 +1,81 @@
-﻿using GestaoColaboradores.Domain.Entities;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using GestaoColaboradores.Infrastructure.Data;
+using GestaoColaboradores.Domain.Entities;
+using BCrypt.Net;
+using System.Security.Claims;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
 using System.Text;
 
-namespace GestaoColaboradores.API.Controllers;
-
-public class LoginDto
+namespace GestaoColaboradores.API.Controllers
 {
-    public string Email { get; set; } = string.Empty;
-    public string Senha { get; set; } = string.Empty;
-}
-
-public class RegistroDto : LoginDto
-{
-    public string Nome { get; set; } = string.Empty;
-    public bool IsAdmin { get; set; }
-}
-
-[ApiController]
-[Route("api/[controller]")]
-public class AuthController : ControllerBase
-{
-    private readonly UserManager<Usuario> _userManager;
-    private readonly RoleManager<IdentityRole> _roleManager;
-
-    public AuthController(UserManager<Usuario> userManager, RoleManager<IdentityRole> roleManager)
+    public class LoginDto
     {
-        _userManager = userManager;
-        _roleManager = roleManager;
+        public string Email { get; set; } = string.Empty;
+        public string Senha { get; set; } = string.Empty;
     }
 
-    [HttpPost("registrar")]
-    public async Task<IActionResult> Registrar([FromBody] RegistroDto dto)
+    [ApiController]
+    [Route("api/[controller]")]
+    public class AuthController : ControllerBase
     {
-        var user = new Usuario { UserName = dto.Email, Email = dto.Email, NomeCompleto = dto.Nome };
-        var result = await _userManager.CreateAsync(user, dto.Senha); // A senha deve ter letras, números e símbolos
+        private readonly AppDbContext _context;
+        private readonly IConfiguration _configuration;
 
-        if (!result.Succeeded) return BadRequest(result.Errors);
-
-        if (dto.IsAdmin)
+        public AuthController(AppDbContext context, IConfiguration configuration)
         {
-            if (!await _roleManager.RoleExistsAsync("Admin"))
-                await _roleManager.CreateAsync(new IdentityRole("Admin"));
-
-            await _userManager.AddToRoleAsync(user, "Admin");
+            _context = context;
+            _configuration = configuration;
         }
 
-        return Ok(new { Mensagem = "Usuário registrado com sucesso!" });
-    }
-
-    [HttpPost("login")]
-    public async Task<IActionResult> Login([FromBody] LoginDto dto)
-    {
-        var user = await _userManager.FindByEmailAsync(dto.Email);
-        if (user == null || !await _userManager.CheckPasswordAsync(user, dto.Senha))
-            return Unauthorized("Credenciais inválidas.");
-
-        var claims = new List<Claim>
+        [HttpPost("login")]
+        public async Task<IActionResult> Login([FromBody] LoginDto dto)
         {
-            new Claim(ClaimTypes.NameIdentifier, user.Id),
-            new Claim(ClaimTypes.Email, user.Email!)
-        };
+            // 1. Procura o utilizador pelo e-mail
+            var usuario = await _context.Usuarios
+                .FirstOrDefaultAsync(u => u.Email == dto.Email.ToLower());
 
-        var roles = await _userManager.GetRolesAsync(user);
-        foreach (var role in roles)
-            claims.Add(new Claim(ClaimTypes.Role, role));
+            // 2. Valida a existência do utilizador e compara a hash da palavra-passe com o BCrypt
+            if (usuario == null || !BCrypt.Net.BCrypt.Verify(dto.Senha, usuario.SenhaHash))
+                return Unauthorized(new { mensagem = "E-mail ou palavra-passe incorretos." });
 
-        var key = new SymmetricSecurityKey(Encoding.ASCII.GetBytes("SuaChaveSuperSecretaMuitoLongaAqui123!"));
-        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256Signature);
-        var tokenDescriptor = new SecurityTokenDescriptor
+            // 3. Gera o token de acesso
+            var token = GerarJwtToken(usuario);
+
+            return Ok(new
+            {
+                token,
+                nome = usuario.NomeCompleto,
+                role = usuario.Role
+            });
+        }
+
+        private string GerarJwtToken(Usuario usuario)
         {
-            Subject = new ClaimsIdentity(claims),
-            Expires = DateTime.UtcNow.AddHours(2),
-            SigningCredentials = creds
-        };
+            // Vai buscar a chave secreta ao appsettings.json (ou usa uma padrão de desenvolvimento)
+            var jwtSettings = _configuration.GetSection("JwtSettings");
+            var secretKey = jwtSettings["Secret"] ?? "chave_super_secreta_para_desenvolvimento_tcc_2026";
+            var key = Encoding.ASCII.GetBytes(secretKey);
 
-        var tokenHandler = new JwtSecurityTokenHandler();
-        var token = tokenHandler.CreateToken(tokenDescriptor);
+            var claims = new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, usuario.Id),
+                new Claim(ClaimTypes.Email, usuario.Email),
+                new Claim(ClaimTypes.Role, usuario.Role)
+            };
 
-        return Ok(new { Token = tokenHandler.WriteToken(token) });
+            var tokenDescriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(claims),
+                Expires = DateTime.UtcNow.AddHours(8),
+                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
+            };
+
+            var tokenHandler = new JwtSecurityTokenHandler();
+            var token = tokenHandler.CreateToken(tokenDescriptor);
+
+            return tokenHandler.WriteToken(token);
+        }
     }
 }
